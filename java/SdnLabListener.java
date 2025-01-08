@@ -1,16 +1,22 @@
 package pl.edu.agh.kt;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Vector;
 
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFPacketIn;
 import org.projectfloodlight.openflow.protocol.OFType;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.protocol.match.MatchField;
 import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.TransportPort;
 
 import net.floodlightcontroller.core.FloodlightContext;
 import net.floodlightcontroller.core.IOFMessageListener;
 import net.floodlightcontroller.core.IOFSwitch;
+import net.floodlightcontroller.core.internal.IOFSwitchService;
 import net.floodlightcontroller.core.module.FloodlightModuleContext;
 import net.floodlightcontroller.core.module.FloodlightModuleException;
 import net.floodlightcontroller.core.module.IFloodlightModule;
@@ -18,8 +24,11 @@ import net.floodlightcontroller.core.module.IFloodlightService;
 
 import net.floodlightcontroller.core.IFloodlightProviderService;
 import net.floodlightcontroller.restserver.IRestApiService;
+import net.floodlightcontroller.threadpool.IThreadPoolService;
 
 import java.util.ArrayList;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +38,12 @@ public class SdnLabListener implements IFloodlightModule, IOFMessageListener {
 	protected IFloodlightProviderService floodlightProvider;
 	private IRestApiService restApiService;
 	protected static Logger logger;
+	private static IThreadPoolService threadPoolService;
+	private static IOFSwitchService switchService;
+	private StatisticsCollector statisticsCollector;
+
+	 public static Vector<Flow> active_flows = new Vector<>();
+	 Map<Integer, Flow> schedule_table = new HashMap<Integer, Flow>();
 
 	@Override
 	public String getName() {
@@ -48,21 +63,36 @@ public class SdnLabListener implements IFloodlightModule, IOFMessageListener {
 	}
 
 	@Override
-	public net.floodlightcontroller.core.IListener.Command receive(IOFSwitch sw, OFMessage msg,
-			FloodlightContext cntx) {
+	public net.floodlightcontroller.core.IListener.Command receive(
+			IOFSwitch sw, OFMessage msg, FloodlightContext cntx) {
 
-		logger.info("************* NEW PACKET IN *************");
-//		PacketExtractor extractor = new PacketExtractor();
-//		extractor.packetExtract(cntx);
+		
 
-		// TODO LAB 6
-		OFPacketIn pin = (OFPacketIn) msg;
-		OFPort outPort = OFPort.of(0);
-		if (pin.getInPort() == OFPort.of(1)) {
-			outPort = OFPort.of(2);
-		} else
-			outPort = OFPort.of(1);
-		Flows.simpleAdd(sw, pin, cntx, outPort);
+		switch (msg.getType()) {
+		case PACKET_IN:
+						
+			logger.info("************* NEW PACKET IN *************");
+			
+			PacketExtractor extractor = new PacketExtractor();
+			Map<String, TransportPort> ports = extractor.packetExtract(cntx);
+			
+			if (ports != null) {
+                statisticsCollector.addFlow(sw, ports);
+            }
+//			Flows.sendPacketOut(sw);
+			
+			break;
+			
+		case FLOW_REMOVED:
+			logger.info("************* FLOW REMOVED *************");
+			break;
+
+		default:
+			logger.error("MSG TYPE {}", msg.getType());
+			break;
+		}
+		
+		
 
 		return Command.STOP;
 	}
@@ -83,23 +113,41 @@ public class SdnLabListener implements IFloodlightModule, IOFMessageListener {
 	public Collection<Class<? extends IFloodlightService>> getModuleDependencies() {
 		Collection<Class<? extends IFloodlightService>> l = new ArrayList<Class<? extends IFloodlightService>>();
 		l.add(IFloodlightProviderService.class);
+		l.add(IOFSwitchService.class);
+		l.add(IThreadPoolService.class);
 		l.add(IRestApiService.class);
 		return l;
 	}
 
 	@Override
-	public void init(FloodlightModuleContext context) throws FloodlightModuleException {
-		floodlightProvider = context.getServiceImpl(IFloodlightProviderService.class);
-		logger = LoggerFactory.getLogger(SdnLabListener.class);
+	public void init(FloodlightModuleContext context)
+			throws FloodlightModuleException {
 		restApiService = context.getServiceImpl(IRestApiService.class);
+		floodlightProvider = context
+				.getServiceImpl(IFloodlightProviderService.class);
+		switchService = context.getServiceImpl(IOFSwitchService.class);
+		threadPoolService = context.getServiceImpl(IThreadPoolService.class);
+		logger = LoggerFactory.getLogger(SdnLabListener.class);
+		statisticsCollector = new StatisticsCollector(threadPoolService);
 	}
 
 	@Override
-	public void startUp(FloodlightModuleContext context) throws FloodlightModuleException {
+	public void startUp(FloodlightModuleContext context)
+			throws FloodlightModuleException {
 		floodlightProvider.addOFMessageListener(OFType.PACKET_IN, this);
-		logger.info("******************* START **************************");
-		restApiService.addRestletRoutable(new Rest());
+		floodlightProvider.addOFMessageListener(OFType.FLOW_REMOVED, this);
+		restApiService.addRestletRoutable(new RestLab());
 
+		logger.info("******************* START **************************");
+		
+//		logger.warn("turururu");
+//		flowStatsCollector = threadPoolService.getScheduledExecutor()
+//				.scheduleAtFixedRate(new TestClass(), 3,
+//						3, TimeUnit.SECONDS);
+//		// tentativePortStats.clear();
+//		logger.warn("Statistics collection thread(s) started");
+		
+//		
 	}
 
 }
