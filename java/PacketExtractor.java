@@ -31,6 +31,8 @@ public class PacketExtractor {
 	private TCP tcp;
 	private UDP udp;
 	private OFMessage msg;
+	public Map<String, TransportPort> ports;
+	public Map<String, IPv4Address> ips;
 
 	public PacketExtractor(FloodlightContext cntx, OFMessage msg) {
 		this.cntx = cntx;
@@ -42,12 +44,12 @@ public class PacketExtractor {
 		logger.info("PacketExtractor: Constructor method called");
 	}
 
-	public Map<String, TransportPort> packetExtract(FloodlightContext cntx) {
+	public void packetExtract(FloodlightContext cntx) {
 		this.cntx = cntx;
-		return extractEth();
+		extractEth();
 	}
 
-	public Map<String, TransportPort> extractEth() {
+	public void extractEth() {
 		eth = IFloodlightProviderService.bcStore.get(cntx,
 				IFloodlightProviderService.CONTEXT_PI_PAYLOAD);
 
@@ -62,7 +64,18 @@ public class PacketExtractor {
 			ipv4 = (IPv4) eth.getPayload();
 
 			byte[] ipOptions = ipv4.getOptions();
+			
 			IPv4Address dstIp = ipv4.getDestinationAddress();
+			IPv4Address srcIp = ipv4.getSourceAddress();
+			
+			logger.info("Frame: srcIP IPV4{}", dstIp);
+			logger.info("Frame: DSTIP IPV4{}", srcIp);
+			
+			Map<String, IPv4Address> ips = new HashMap<>();
+		    ips.put("srcIP", srcIp);
+		    ips.put("dstIP", dstIp);
+
+		    this.ips = ips;	
 
 			if (ipv4.getProtocol() == IpProtocol.TCP) {
 				TCP tcp = (TCP) ipv4.getPayload();
@@ -71,20 +84,24 @@ public class PacketExtractor {
 				TransportPort dstPort = tcp.getDestinationPort();
 				
 				logger.info("Frame: srcPort TCP{}", srcPort);
-				logger.info("Frame: DSTPORT!!! TCP{}", dstPort);
+				logger.info("Frame: DSTPORT TCP{}", dstPort);
 				
 				Map<String, TransportPort> ports = new HashMap<>();
 			    ports.put("srcPort", srcPort);
 			    ports.put("dstPort", dstPort);
 
-			    return ports;
-				
+			    this.ports = ports;			
 
 			}
 		}
-		
-		return null;
-
+	}
+	
+	public Map<String, TransportPort> getPorts() {
+		return ports;
+	}
+	
+	public Map<String, IPv4Address> getIPs() {
+		return ips;
 	}
 
 	public void extractArp() {

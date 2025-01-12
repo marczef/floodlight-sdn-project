@@ -10,6 +10,7 @@ import org.projectfloodlight.openflow.protocol.OFPacketIn;
 import org.projectfloodlight.openflow.protocol.OFType;
 import org.projectfloodlight.openflow.protocol.OFVersion;
 import org.projectfloodlight.openflow.protocol.match.MatchField;
+import org.projectfloodlight.openflow.types.IPv4Address;
 import org.projectfloodlight.openflow.types.OFPort;
 import org.projectfloodlight.openflow.types.TransportPort;
 
@@ -74,10 +75,12 @@ public class SdnLabListener implements IFloodlightModule, IOFMessageListener {
 			logger.info("************* NEW PACKET IN *************");
 			
 			PacketExtractor extractor = new PacketExtractor();
-			Map<String, TransportPort> ports = extractor.packetExtract(cntx);
+			extractor.packetExtract(cntx);
+			Map<String, TransportPort> ports = extractor.getPorts();
+			Map<String, IPv4Address> ips = extractor.getIPs();
 			
-			if (ports != null) {
-                statisticsCollector.addFlow(sw, ports);
+			if (ports != null && ips != null) {
+                statisticsCollector.addFlow(sw, ports, ips);
             }
 //			Flows.sendPacketOut(sw);
 			

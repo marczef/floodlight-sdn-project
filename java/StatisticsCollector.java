@@ -27,6 +27,7 @@ import org.projectfloodlight.openflow.protocol.OFStatsType;
 import org.projectfloodlight.openflow.protocol.OFVersion;
 import org.projectfloodlight.openflow.protocol.match.Match;
 import org.projectfloodlight.openflow.protocol.match.MatchField;
+import org.projectfloodlight.openflow.types.IPv4Address;
 import org.projectfloodlight.openflow.types.OFGroup;
 import org.projectfloodlight.openflow.types.OFPort;
 import org.projectfloodlight.openflow.types.DatapathId;
@@ -58,10 +59,10 @@ public class StatisticsCollector {
 	private Timer timer;
 
 	public static int Tmin = 1000;
-	public static int Tmax = 5000;
+	public static int Tmax = 10000;
 
-	private static final long treshold1 = 625000; // Minimalna zmiana ruchu 5Mbps
-	private static final long treshold2 = 2500000; // Duzy ruch 20Mbps
+	private static final long treshold1 = 5; // Minimalny ruch5Mbps
+	private static final long treshold2 = 12; // Duzy ruch 20Mbps
 
 	public static int alfa = 2;
 	public static int beta = 4;
@@ -69,52 +70,57 @@ public class StatisticsCollector {
 	public int pollingInterval = 5000;
 
 	private final Map<Integer, List<Flow>> schedule_table = new ConcurrentHashMap<>();
-	private final List<Object> active_flows = Collections
-			.synchronizedList(new ArrayList<>());
+	private final Map<Integer, ScheduledFuture<?>> intervalThreadPools = new ConcurrentHashMap<>();
 
 	public StatisticsCollector(IThreadPoolService threadPoolService) {
 		this.threadPoolService = threadPoolService;
 
-		threadPoolService.getScheduledExecutor().scheduleAtFixedRate(
-				new Runnable() {
+		ScheduledFuture<?> future = threadPoolService.getScheduledExecutor()
+				.scheduleAtFixedRate(new Runnable() {
 					@Override
 					public void run() {
-						processScheduleTable();
+						processScheduleTable(Tmin);
 					}
 				}, Tmin, Tmin, TimeUnit.MILLISECONDS);
+
+		intervalThreadPools.put(Tmin, future);
+		logger.info("intervalThreadPools" + intervalThreadPools);
 
 		logger.warn("StatisticsCollector initialized with periodic processing thread.");
 	}
 
 	public synchronized void addFlow(IOFSwitch sw,
-			Map<String, TransportPort> ports) {
-		Flow newFlow = new Flow(sw, ports);
+			Map<String, TransportPort> ports, Map<String, IPv4Address> ips) {
+		Flow newFlow = new Flow(sw, ports, ips);
 
-		if (!schedule_table.containsKey(Tmin)) {
-			schedule_table.put(Tmin, new ArrayList<Flow>());
+		synchronized (schedule_table) {
+
+			if (!schedule_table.containsKey(Tmin)) {
+				schedule_table.put(Tmin, new ArrayList<Flow>());
+			}
+			schedule_table.get(Tmin).add(newFlow);
 		}
-		schedule_table.get(Tmin).add(newFlow);
 
 	}
 
-	private synchronized void processScheduleTable() {
+	private synchronized void processScheduleTable(int currInterval) {
 
-		logger.info("schedule_table:" + schedule_table.toString());
+		synchronized (schedule_table) {
 
-		for (Map.Entry<Integer, List<Flow>> entry : schedule_table.entrySet()) {
-			int interval = entry.getKey();
-			List<Flow> flows = entry.getValue();
+			logger.info("schedule_table:" + schedule_table.toString());
+			logger.info("currInterval:" + currInterval);
+			logger.info("futures list" + intervalThreadPools.keySet());
 
-			for (Flow flow : flows) {
-				TransportPort dstPort = flow.getDstPort();
-				TransportPort srcPort = flow.getSrcPort();
+			for (Map.Entry<Integer, List<Flow>> entry : schedule_table
+					.entrySet()) {
+				int interval = entry.getKey();
+				List<Flow> flows = entry.getValue();
 
-				// if (dstPort == null && flow.getFuture() != null) {
-				// logger.info("powinien flow byc usuniety");
-				// removeFlow(flow);
-				// }
+				for (Flow flow : flows) {
+					processFlow(flow, interval);
+				}
 
-				processFlow(flow, interval);
+				processThreads();
 			}
 		}
 	}
@@ -133,18 +139,23 @@ public class StatisticsCollector {
 							MatchField.TCP_SRC);
 					TransportPort fSrcTcp = flow.getSrcPort();
 
+					IPv4Address sDstIP = pse.getMatch()
+							.get(MatchField.IPV4_DST);
+					IPv4Address fDstIP = flow.getDstIP();
+					IPv4Address sSrcIP = pse.getMatch()
+							.get(MatchField.IPV4_SRC);
+					IPv4Address fSrcIP = flow.getSrcIP();
+
 					if (sDstTcp != null && fDstTcp != null
 							&& sDstTcp.equals(fDstTcp) && sSrcTcp != null
-							&& fSrcTcp != null && sSrcTcp.equals(fSrcTcp)) {
-
-						// logger.info("Switch bytecount: "
-						// + pse.getByteCount().getValue());
-						// logger.info("Flow getlast byte count "
-						// + flow.getLastByteCount());
+							&& fSrcTcp != null && sSrcTcp.equals(fSrcTcp)
+							&& sDstIP != null && fDstIP != null
+							&& fDstIP.equals(sDstIP) && sSrcIP != null
+							&& fSrcIP != null && fSrcIP.equals(sSrcIP)) {
 
 						long diffByteCount = pse.getByteCount().getValue()
 								- flow.getLastByteCount();
-
+						
 						long throughput = (long) calculateThroughput(
 								diffByteCount, interval);
 
@@ -153,9 +164,15 @@ public class StatisticsCollector {
 						flow.setLastByteCount(pse.getByteCount().getValue());
 
 						int newInterval = calculateNewInterval(interval,
-								diffByteCount);
-						updateFlowInScheduleTable(flow, newInterval);
+								throughput);
+
+						if (interval != newInterval) {
+							updateFlowInScheduleTable(flow, newInterval);
+						}
 					}
+					// else { TODO FIX LOGIC HERE
+					// removeFlow(flow);
+					// }
 				}
 			}
 		}
@@ -171,84 +188,157 @@ public class StatisticsCollector {
 		}
 	}
 
-	private synchronized void updateFlowInScheduleTable(Flow flow,
-			int newInterval) {
-		
-		logger.info("polling: " + flow.getInterval());
-		logger.info("new interval: " + newInterval);
-		
-//		int currentInterval = flow.getInterval();
-//
-//		if (schedule_table.containsKey(currentInterval)) {
-//			schedule_table.get(currentInterval).remove(flow);
-//		}
-//
-//		flow.setPollInterval(newInterval);
-//
-//		if (!schedule_table.containsKey(newInterval)) {
-//			schedule_table.put(newInterval, new ArrayList<Flow>());
-//		}
-//		schedule_table.get(newInterval).add(flow);
-	}
+	private void updateFlowInScheduleTable(Flow flow, final int newInterval) {
 
-	protected void removeFlow(Flow flow) {
-		logger.info("removed flow");
-
-		synchronized (active_flows) {
-			if (active_flows.remove(flow)) {
-				logger.info("Flow usuniety z active_flows: " + flow);
-			}
-		}
+		int currentInterval = flow.getInterval();
 
 		synchronized (schedule_table) {
-			for (Map.Entry<Integer, List<Flow>> entry : schedule_table
-					.entrySet()) {
-				if (entry.getValue().remove(flow)) {
-					logger.info("Flow usuniety z schedule_table dla interwalu: "
-							+ entry.getKey());
-					break;
+			try {
+				if (schedule_table.containsKey(currentInterval)) {
+					List<Flow> flows = new ArrayList<>(
+							schedule_table.get(currentInterval));
+					if (flows != null && flows.contains(flow)) {
+
+						flows.remove(flow);
+						schedule_table.put(currentInterval, flows);
+
+						if (flows.isEmpty()) {
+							schedule_table.remove(currentInterval);
+						}
+					}
+				}
+
+				flow.setPollInterval(newInterval);
+
+				if (!schedule_table.containsKey(newInterval)) {
+					schedule_table.put(newInterval, new ArrayList<Flow>());
+					schedule_table.get(newInterval).add(flow);
+
+					synchronized (intervalThreadPools) {
+						if (!intervalThreadPools.containsKey(newInterval)) {
+							newThread(newInterval);
+						}
+					}
+
+				} else {
+					schedule_table.get(newInterval).add(flow);
+				}
+
+			} catch (Exception e) {
+				logger.error(
+						"An error occurred while removing flow from schedule_table: ",
+						e);
+			}
+
+		}
+	}
+
+	private void processThreads() {
+
+		synchronized (schedule_table) {
+			synchronized (intervalThreadPools) {
+				for (Integer interval : new ArrayList<>(
+						intervalThreadPools.keySet())) {
+					if (!schedule_table.containsKey(interval)) {
+						ScheduledFuture<?> future = intervalThreadPools
+								.remove(interval);
+						if (future != null && !future.isCancelled()
+								&& !future.isDone()) {
+							future.cancel(false);
+							logger.info("Removed thread pool for interval: "
+									+ interval);
+						}
+					}
 				}
 			}
 		}
-
-		logger.info("Usunieto watek dla flow: " + flow);
 	}
 
-	protected List<OFStatsReply> getSwitchStatistics(IOFSwitch sw) {
+	protected synchronized void newThread(final int newInterval) {
+
+		synchronized (intervalThreadPools) {
+
+			if (!intervalThreadPools.containsKey(newInterval)) {
+
+				ScheduledFuture<?> future = threadPoolService
+						.getScheduledExecutor().scheduleAtFixedRate(
+								new Runnable() {
+									@Override
+									public void run() {
+										processScheduleTable(newInterval);
+									}
+								}, newInterval, newInterval,
+								TimeUnit.MILLISECONDS);
+
+				logger.info("Created threath for interval " + newInterval);
+
+				intervalThreadPools.put(newInterval, future);
+			}
+
+		}
+	}
+
+	private synchronized void removeFlow(Flow flow) {
+		synchronized (schedule_table) {
+			try {
+				int currentInterval = flow.getInterval();
+
+				if (schedule_table.containsKey(currentInterval)) {
+					List<Flow> flows = schedule_table.get(currentInterval);
+
+					if (flows != null && flows.contains(flow)) {
+						flows.remove(flow);
+
+					} else {
+						logger.warn("Flow not found in schedule_table for interval: "
+								+ currentInterval);
+					}
+				} else {
+					logger.warn("No schedule_table entry for interval: "
+							+ currentInterval);
+				}
+			} catch (Exception e) {
+				logger.error("An error occurred while removing flow: ", e);
+			}
+		}
+	}
+
+	protected synchronized List<OFStatsReply> getSwitchStatistics(IOFSwitch sw) {
 		ListenableFuture<?> future;
 		List<OFStatsReply> values = null;
 
-		Match match;
 		if (sw != null) {
-
-			OFStatsRequest<?> req = null;
-			match = sw.getOFFactory().buildMatch().build();
-			if (sw.getOFFactory().getVersion().compareTo(OFVersion.OF_11) >= 0) {
-				req = sw.getOFFactory().buildFlowStatsRequest().setMatch(match)
-						.setOutPort(OFPort.ANY)
-						// tu OUTPORT
-						.setOutGroup(OFGroup.ANY).setTableId(TableId.ALL)
-						.build();
-			}
-
 			try {
-				if (req != null) {
-					future = sw.writeStatsRequest(req);
+				Match match = sw.getOFFactory().buildMatch().build();
+				OFStatsRequest<?> req = sw.getOFFactory()
+						.buildFlowStatsRequest().setMatch(match)
+						.setOutPort(OFPort.ANY).setOutGroup(OFGroup.ANY) //TODO OFPort.of(poort)
+						.setTableId(TableId.ALL).build();
+
+				future = sw.writeStatsRequest(req);
+
+				try {
 					values = (List<OFStatsReply>) future.get(
 							pollingInterval * 1000 / 2, TimeUnit.MILLISECONDS);
-
-					// if (!values.isEmpty()) {
-					// logger.info("values" + values);
-					// } else {
-					// logger.info("values EMPTY!");
-					// }
+					logger.info("VALUES: " + values);
+				} catch (TimeoutException e) {
+					logger.warn("Timeout retrieving statistics from switch {}",
+							sw.getId());
+				} catch (ExecutionException e) {
+					logger.error(
+							"Execution exception retrieving statistics from switch {}. Error: {}",
+							sw.getId(), e);
 				}
+
 			} catch (Exception e) {
 				logger.error(
-						"Failure retrieving statistics from switch {}. {}", sw,
-						e);
+						"Failed to build or send statistics request to switch {}. Error: {}",
+						sw, e);
 			}
+		} else {
+			logger.warn("Switch is null, cannot retrieve statistics.");
 		}
+
 		return values;
 	}
 
