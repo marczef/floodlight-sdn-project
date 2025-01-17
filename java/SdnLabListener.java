@@ -140,7 +140,7 @@ public class SdnLabListener implements IFloodlightModule, IOFMessageListener {
 		floodlightProvider.addOFMessageListener(OFType.PACKET_IN, this);
 		floodlightProvider.addOFMessageListener(OFType.FLOW_REMOVED, this);
 		restApiService.addRestletRoutable(new RestLab());
-
+		restApiService.addRestletRoutable(new Rest());
 		logger.info("******************* START **************************");
 		
 //		logger.warn("turururu");

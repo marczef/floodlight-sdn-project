@@ -53,10 +53,12 @@ public class Topology {
     public static class Link {
         private String node1;
         private String node2;
+        private String label;
 
-        public Link(String node1, String node2) {
+        public Link(String node1, String node2, String label) {
             this.node1 = node1;
             this.node2 = node2;
+            this.label = label;
         }
 
         public String getNode1() {
@@ -74,10 +76,18 @@ public class Topology {
         public void setNode2(String node2) {
             this.node2 = node2;
         }
+        
+        public String getLabel() {
+            return label;
+        }
+
+        public void setLabel(String label) {
+            this.label = label;
+        }
 
         @Override
         public String toString() {
-            return "Link{node1=" + node1 + ", node2=" + node2 + '}';
+            return "Link{node1=" + node1 + ", node2=" + node2 + ", label=" + label+ '}';
         }
     }
 
@@ -86,4 +96,3 @@ public class Topology {
         return "Topology{nodes=" + nodes + ", links=" + links + '}';
     }
 }
-

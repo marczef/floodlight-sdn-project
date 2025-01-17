@@ -1,6 +1,7 @@
 package pl.edu.agh.kt;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Random;
 
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -26,17 +27,17 @@ public class RestServer extends ServerResource {
 	
 	private Topology getSampleTopology() {
 		Topology top = new Topology();
-		
+		Random r = new Random();
 		ArrayList<Topology.Link> links = new ArrayList<Topology.Link>();
-		links.add(new Topology.Link("h1", "s1"));
-		links.add(new Topology.Link("s1", "h1"));
-		links.add(new Topology.Link("s1", "h2"));
-		links.add(new Topology.Link("h2", "s1"));
+		links.add(new Topology.Link("h1", "s1", r.nextInt(100) + " MBs"));
+		links.add(new Topology.Link("s1", "h1", r.nextInt(100) + " MBs"));
+		links.add(new Topology.Link("s1", "h2", r.nextInt(100) + " MBs"));
+		links.add(new Topology.Link("h2", "s1", r.nextInt(100) + " MBs"));
 		top.setLinks(links);
 		
 		ArrayList<Topology.Node> nodes = new ArrayList<Topology.Node>();
 		nodes.add(new Topology.Node("h1"));
-		nodes.add(new Topology.Node("s1"));
+		nodes.add(new Topology.Node("h2"));
 		nodes.add(new Topology.Node("s1"));
 		top.setNodes(nodes);
 		
