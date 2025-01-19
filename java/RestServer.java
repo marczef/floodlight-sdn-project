@@ -13,34 +13,24 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 public class RestServer extends ServerResource {
 	private static final ObjectMapper mapper;
+	private TopologyManager topManager;
+	
 	static {
 		mapper = new ObjectMapper();
 		mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
 	}
 	protected static Logger log = LoggerFactory.getLogger(RestServer.class);
 	
+	public RestServer() {
+		this.topManager = TopologyManager.getInstance();
+	}
+	
 	@Get("json")
 	public String handleGet() throws JsonProcessingException {
-		log.info("handleGet");
 		return mapper.writeValueAsString(getSampleTopology());
 	}
 	
 	private Topology getSampleTopology() {
-		Topology top = new Topology();
-		Random r = new Random();
-		ArrayList<Topology.Link> links = new ArrayList<Topology.Link>();
-		links.add(new Topology.Link("h1", "s1", r.nextInt(100) + " MBs"));
-		links.add(new Topology.Link("s1", "h1", r.nextInt(100) + " MBs"));
-		links.add(new Topology.Link("s1", "h2", r.nextInt(100) + " MBs"));
-		links.add(new Topology.Link("h2", "s1", r.nextInt(100) + " MBs"));
-		top.setLinks(links);
-		
-		ArrayList<Topology.Node> nodes = new ArrayList<Topology.Node>();
-		nodes.add(new Topology.Node("h1"));
-		nodes.add(new Topology.Node("h2"));
-		nodes.add(new Topology.Node("s1"));
-		top.setNodes(nodes);
-		
-		return top;
+		return topManager.getTopologyWithDiffTimestamp();
 	}
 }
