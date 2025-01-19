@@ -141,7 +141,7 @@ public class SdnLabListener implements IFloodlightModule, IOFMessageListener {
 		floodlightProvider.addOFMessageListener(OFType.FLOW_REMOVED, this);
 		restApiService.addRestletRoutable(new Rest());
 
-		logger.info("******************* start **************************");
+		logger.info("******************* START **************************");
 		
 //		logger.warn("turururu");
 //		flowStatsCollector = threadPoolService.getScheduledExecutor()

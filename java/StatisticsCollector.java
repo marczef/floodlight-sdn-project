@@ -95,7 +95,6 @@ public class StatisticsCollector {
 	public synchronized void addFlow(IOFSwitch sw,
 			Map<String, TransportPort> ports, Map<String, IPv4Address> ips) {
 		Flow newFlow = new Flow(sw, ports, ips);
-//		this.topManager.addLink(newFlow.getSrcIP().toString(), newFlow.getDstIP().toString(), 0);
 
 		synchronized (schedule_table) {
 
@@ -131,14 +130,10 @@ public class StatisticsCollector {
 
 	private void processFlow(Flow flow, int interval) {
 		List<OFStatsReply> replies = getSwitchStatistics(flow.getSwitch());
-		logger.info("PROCESS FLOW");
 		if (replies != null) {
 			for (OFStatsReply r : replies) {
 				OFFlowStatsReply psr = (OFFlowStatsReply) r;
-				logger.info("PSR");
 				for (OFFlowStatsEntry pse : psr.getEntries()) {
-					logger.info("PSE");
-
 					TransportPort sDstTcp = pse.getMatch().get(
 							MatchField.TCP_DST);
 					TransportPort fDstTcp = flow.getDstPort();
@@ -152,8 +147,6 @@ public class StatisticsCollector {
 					IPv4Address sSrcIP = pse.getMatch()
 							.get(MatchField.IPV4_SRC);
 					IPv4Address fSrcIP = flow.getSrcIP();
-
-//					this.topManager.addLink(sSrcTcp.toString(), sDstTcp.toString(), 0);
 					
 					if (sDstTcp != null && fDstTcp != null
 							&& sDstTcp.equals(fDstTcp) && sSrcTcp != null
