@@ -71,6 +71,9 @@ public class StatisticsCollector {
 
 	private final Map<Integer, List<Flow>> schedule_table = new ConcurrentHashMap<>();
 	private final Map<Integer, ScheduledFuture<?>> intervalThreadPools = new ConcurrentHashMap<>();
+	private final List<Flow> flows = new ArrayList<Flow>();
+	
+	private final TopologyManager topManager = TopologyManager.getInstance();
 
 	public StatisticsCollector(IThreadPoolService threadPoolService) {
 		this.threadPoolService = threadPoolService;
@@ -131,7 +134,6 @@ public class StatisticsCollector {
 			for (OFStatsReply r : replies) {
 				OFFlowStatsReply psr = (OFFlowStatsReply) r;
 				for (OFFlowStatsEntry pse : psr.getEntries()) {
-
 					TransportPort sDstTcp = pse.getMatch().get(
 							MatchField.TCP_DST);
 					TransportPort fDstTcp = flow.getDstPort();
@@ -145,7 +147,7 @@ public class StatisticsCollector {
 					IPv4Address sSrcIP = pse.getMatch()
 							.get(MatchField.IPV4_SRC);
 					IPv4Address fSrcIP = flow.getSrcIP();
-
+					
 					if (sDstTcp != null && fDstTcp != null
 							&& sDstTcp.equals(fDstTcp) && sSrcTcp != null
 							&& fSrcTcp != null && sSrcTcp.equals(fSrcTcp)
@@ -160,6 +162,8 @@ public class StatisticsCollector {
 								diffByteCount, interval);
 
 						logger.info("Throughput in Mbs " + throughput);
+						
+						this.topManager.addLink(fSrcIP.toString(), sDstIP.toString(), throughput);
 
 						flow.setLastByteCount(pse.getByteCount().getValue());
 

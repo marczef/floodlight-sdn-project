@@ -54,11 +54,13 @@ public class Topology {
         private String node1;
         private String node2;
         private String label;
+        private long timestamp;
 
-        public Link(String node1, String node2, String label) {
+        public Link(String node1, String node2, String label, long timestamp) {
             this.node1 = node1;
             this.node2 = node2;
             this.label = label;
+            this.timestamp = timestamp;
         }
 
         public String getNode1() {
@@ -83,6 +85,14 @@ public class Topology {
 
         public void setLabel(String label) {
             this.label = label;
+        }
+        
+        public long getTimestamp() {
+            return timestamp;
+        }
+
+        public void setTimestamp(long timestamp) {
+            this.timestamp = timestamp;
         }
 
         @Override
