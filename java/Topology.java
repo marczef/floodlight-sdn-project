@@ -96,3 +96,4 @@ public class Topology {
         return "Topology{nodes=" + nodes + ", links=" + links + '}';
     }
 }
+
