@@ -30,6 +30,8 @@ Pseudokod algorytmu znajduję się w folderze algorithm.
 
 Link do publikacji: https://ieeexplore.ieee.org/document/6838227 .
 
+![Algorytm](./algo.png)
+
 ## Instalacja środowiska
 
 Korzystamy z wersje OF 13, po zainstalowaniu floodlighta z brancha master. Potrzebna jest do tego Java 8.
