@@ -21,7 +21,7 @@ Warto po każdym uruchomeniu wpisać `sudo mn -c` aby wyczyścić środowisko mi
 
 ### Uruchomienie generatora ruchu
 
-1.W pliku topology_final.py zostało zaimplementować uruchamianie serwerów iperf3 na hostach h3 i h4.
+1.W pliku topology_final.py zostało zaimplementować uruchamianie serwerów iperf3 na hostach h3 i h4.  
 2. Następnie w pliku topolgy_final.py wywoływane są skrypty które uruchamiają ruch iperf miedzy h1 a h3 i h2 i h4 dla wylosowanego portu.
 
 ## Algorytm
